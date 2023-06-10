@@ -174,6 +174,106 @@ fgsea_T <- fgsea_T %>%
 write.csv(fgsea_T, file = "fgsea/fgsea_Hallmark_Tcell_week0_week2.csv",
           row.names = F)
 
+# B cell pseudobulk  -------------------------------
+data <- readRDS("Bcell_nodoublets.rds")
+mat <- data$RNA@counts
+data@meta.data$samp_clust <- paste(stringr::str_extract(rownames(data@meta.data), "[^_]*_[^_]*"),
+                                   data@meta.data$Bcell_nd_clusters, sep = "_") #change cluster name
+data@meta.data$samp_clust <- factor(data@meta.data$samp_clust)
+samp_clust_list <- data@meta.data$samp_clust
+names(samp_clust_list) <- colnames(mat)
+
+#filter to remove samples with few cells
+howmanycells = table(samp_clust_list)
+remove = names(howmanycells)[howmanycells == 1]
+remove_indx = rownames(data@meta.data)[data@meta.data$samp_clust %in% remove]
+
+new_mat = mat[,!colnames(mat) %in% remove_indx]
+new_list = samp_clust_list[!names(samp_clust_list) %in% remove_indx]
+new_list <- droplevels(new_list)
+
+pseudo_mtx <- getPseudobulk(new_mat, new_list)
+
+meta_data <- data.frame(row.names = colnames(pseudo_mtx))
+meta_data$sample <- stringr::str_extract(rownames(meta_data), "[^_]*_[^_]*")
+meta_data$cluster <- sub("^[^_]*_[^_]*_", "", rownames(meta_data))
+meta_data$tmpt <- str_extract(rownames(meta_data), "[^_]*")
+meta_data$cell_number <- as.numeric(table(new_list))
+meta_data$time <- as.numeric(str_extract(meta_data$tmpt, "\\d")) / 2
+
+## B cell for loop DEG dataframe -------------------------------
+# DEGs (wk0 vs wk2) will be saved as an xlsx file
+for(cl in names(table(meta_data$cluster))){
+  # Lets make a temporary dds file to make a graph
+  meta_temp <- meta_data[meta_data$cluster == cl,]
+  count_temp <- pseudo_mtx[,rownames(meta_temp)]
+  dds <- DESeqDataSetFromMatrix(countData = count_temp,
+                                colData = meta_temp,
+                                design = ~ cell_number + tmpt) #adding in cell_number to formula 
+  dds <- DESeq(dds,
+               test = "LRT",
+               reduced = ~cell_number) #reduced formula: accounting for cell_number differences
+  
+  res <- results(dds, contrast = c("tmpt", "wk2", "wk0"))
+  
+  # Create a dataframe of DEGs from DESeq2
+  res_df <- res %>% as.data.frame() %>% arrange(padj) %>% 
+    .[1:3000,]
+  write.xlsx(res_df, file = "Bcell_LRT_wk2_cell_number.xlsx", sheetName = cl, append = TRUE)
+  
+  print(paste("Finished", cl))
+}
+
+# Neutrophil cell pseudobulk  -------------------------------
+data <- readRDS("neut_nodoublets.rds")
+mat <- data$RNA@counts
+data@meta.data$samp_clust <- paste(stringr::str_extract(rownames(data@meta.data), "[^_]*_[^_]*"),
+                                   data@meta.data$neut_nd_clusters, sep = "_") #change cluster name
+data@meta.data$samp_clust <- factor(data@meta.data$samp_clust)
+samp_clust_list <- data@meta.data$samp_clust
+names(samp_clust_list) <- colnames(mat)
+
+#filter to remove samples with few cells
+howmanycells = table(samp_clust_list)
+remove = names(howmanycells)[howmanycells == 1]
+remove_indx = rownames(data@meta.data)[data@meta.data$samp_clust %in% remove]
+
+new_mat = mat[,!colnames(mat) %in% remove_indx]
+new_list = samp_clust_list[!names(samp_clust_list) %in% remove_indx]
+new_list <- droplevels(new_list)
+
+pseudo_mtx <- getPseudobulk(new_mat, new_list)
+
+meta_data <- data.frame(row.names = colnames(pseudo_mtx))
+meta_data$sample <- stringr::str_extract(rownames(meta_data), "[^_]*_[^_]*")
+meta_data$cluster <- sub("^[^_]*_[^_]*_", "", rownames(meta_data))
+meta_data$tmpt <- str_extract(rownames(meta_data), "[^_]*")
+meta_data$cell_number <- as.numeric(table(new_list))
+meta_data$time <- as.numeric(str_extract(meta_data$tmpt, "\\d")) / 2
+
+## Neutrophil for loop DEG dataframe -------------------------------
+# DEGs (wk0 vs wk2) will be saved as an xlsx file
+for(cl in names(table(meta_data$cluster))){
+  # Lets make a temporary dds file to make a graph
+  meta_temp <- meta_data[meta_data$cluster == cl,]
+  count_temp <- pseudo_mtx[,rownames(meta_temp)]
+  dds <- DESeqDataSetFromMatrix(countData = count_temp,
+                                colData = meta_temp,
+                                design = ~ cell_number + tmpt) #adding in cell_number to formula 
+  dds <- DESeq(dds,
+               test = "LRT",
+               reduced = ~cell_number) #reduced formula: accounting for cell_number differences
+  
+  res <- results(dds, contrast = c("tmpt", "wk2", "wk0"))
+  
+  # Create a dataframe of DEGs from DESeq2
+  res_df <- res %>% as.data.frame() %>% arrange(padj) %>% 
+    .[1:3000,]
+   write.xlsx(res_df, file = "Neut_LRT_wk2_cell_number.xlsx", sheetName = cl, append = TRUE)
+  
+  print(paste("Finished", cl))
+}
+
 
 # Fibroblast pseudobulk GSEA -------------------------------
 data <- readRDS("fib_nodoublets.rds")
